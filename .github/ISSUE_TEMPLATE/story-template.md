@@ -1,10 +1,10 @@
 ---
 name: Story  Markdown
 about: Create a story to an epic as a markdown
-title: '[Story:]'
-labels: 'story', 'to be triaged'
-projects: ['input-output-hk/127']
-assignees: 'RSoulat'
+title: '[Story:] <title>'
+labels: story, to be triaged
+projects: 'input-output-hk/127'
+assignees: ''
 ---
 <!--- This template should only be used through /template when filling an epic,
 use the yaml template when creating a story from scratch -->
