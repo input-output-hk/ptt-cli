@@ -146,6 +146,7 @@ listAllTests Ctx{..} = do
     let testCommand = "cabal run escrow-test -- -l"
     hPutStr tempHandle $ T.unpack $ shellScript testCommand ctxProjectPath
     hFlush tempHandle
+    hClose tempHandle
     callProcess "chmod" ["+x", tempPath]
     executeAndStream ctxVerbose tempPath
 

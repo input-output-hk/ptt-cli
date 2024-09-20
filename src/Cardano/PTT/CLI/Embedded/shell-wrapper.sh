@@ -41,7 +41,7 @@ chmod +x $$TEMP_SCRIPT
 OS_TYPE=$(uname)
 
 if [[ "$$OS_TYPE" == "Darwin" ]]; then
-    echo "Running on Linux"
+    echo "Running on macOS"
     NIX_CONFIG="system = x86_64-darwin"
 elif [[ "$$OS_TYPE" == "Linux" ]]; then
      echo "Running on Linux"
