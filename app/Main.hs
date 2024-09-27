@@ -7,6 +7,7 @@ import Options.Applicative
 main :: IO ()
 main = do
   args <- execParser argsInfo
+  let ctx = Ctx (verbose args) (projectPath args)
   case cmd args of
-    CmdRunTests -> error "Not implemented yet"
-    CmdListTests -> listAllTests (Ctx (verbose args) (projectPath args))
+    CmdRunTests target -> runAllTests ctx (Just target)
+    CmdListTests -> listAllTests ctx
