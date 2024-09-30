@@ -1,16 +1,19 @@
-# Template Repository
+# Notes for POC test (using it against minimal-ptt-examples)
 
-Use this template as a repository so that it is automatically plugged into the Project boards
+1. clone into a folder the repo https://github.com/input-output-hk/minimal-ptt-examples.git
 
-## Usage
+2. enter that folder
+   
+   2.1 `git checkout escrow-node-emulator`
+   
+   2.2 `nix develop .`
+   
+   2.3 `cabal build escrow`
+   
+   2.4 `cabal run escrow-test`
 
-1. Click on the `Use this template` button
-2. Fill in the repository details
-3. Once instantiated, ensure that you have the following labels:
-    - `epic`
-    - `story`
-    - `task`
-    - `bug`
-    - `idea`
-    - `to be triaged`
-4. Add the project board to the repository
+4. go back to this repo folder
+   
+   3.1 to separate building output before running the tool `cabal build`
+   
+   3.2 `cabal run ptt-cli -- --project-path=<MINIMAL_EXAMPLES_PATH>  list-tests`
