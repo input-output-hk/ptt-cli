@@ -67,5 +67,7 @@ test-suite ptt-cli-test
     hs-source-dirs:   test
     main-is:          Main.hs
     build-depends:
-        base ^>=4.18.1.0,
-        ptt-cli
+          base ^>=4.18.1.0
+        , ptt-cli
+        , tasty
+        , tasty-hunit
