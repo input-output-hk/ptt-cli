@@ -34,6 +34,7 @@ import Cardano.PTT.CLI.Arguments (TestTarget (..))
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import System.Exit (exitWith)
 
 data TestElement
   = TestGroup !String ![TestElement]
@@ -106,7 +107,7 @@ awaitTestLists verbose h = do
   awaitStartLine verbose h
   tests' <- reverse <$> readTestLists verbose h []
   let testElements = toTestElements tests'
-  liftIO $ TIO.putStrLn $ T.decodeUtf8 $ BSL.toStrict $ encode testElements
+  printJson testElements
   return testElements
 
 -- TODO: this should be a stream instead of a list
@@ -142,13 +143,26 @@ parseTestResult line =
 -- >>> parseTestResult "test1: FAIL (0.1s)"
 -- Just (TestResult {testName = "test1", testStatus = "FAIL", testDuration = 0.1})
 
-awaitTestResults :: (MonadIO m) => Bool -> Handle -> m [TestResult]
-awaitTestResults verbose h = do
+newtype ErrorMsg = ErrorMsg Text
+  deriving (Show)
+
+instance ToJSON ErrorMsg where
+  toJSON (ErrorMsg msg) = object ["error" .= msg]
+
+awaitTestResults :: (MonadIO m) => Bool -> Bool -> Handle -> m [TestResult]
+awaitTestResults showErrorIfEmpty verbose h = do
   awaitStartLine verbose h
   tests' <- reverse <$> readTestResults verbose h []
   let testResults = mapMaybe parseTestResult tests'
-  liftIO $ TIO.putStrLn $ T.decodeUtf8 $ BSL.toStrict $ encode testResults
+  when (showErrorIfEmpty && null testResults) $ do
+    printJson $ ErrorMsg "No test results found"
+    -- exit process with error
+    liftIO $ exitWith $ ExitFailure 1
+  printJson testResults
   return testResults
+
+printJson :: (MonadIO m, ToJSON a) => a -> m ()
+printJson = liftIO . TIO.putStrLn . T.decodeUtf8 . BSL.toStrict . encode
 
 -- Function to stream output from a handle
 streamOutput :: Bool -> Handle -> IO ()
@@ -217,9 +231,9 @@ listAllTests ctx = do
 
 runAllTests :: Ctx -> Maybe TestTarget -> IO ()
 runAllTests ctx testTarget = do
-  let testCommand =
-        "cabal run escrow-test " <> case testTarget of
-          Just (TestTargetSingleTest target) -> "-- -p  '\\$0==\"" <> T.pack target <> "\"'"
-          Just (TestTargetPattern target) -> "-- -p  '/" <> T.pack target <> "/'"
-          _otherwise -> ""
-  generalExecution testCommand awaitTestResults ctx
+  let (suffix, showErrorIfEmpty) = case testTarget of
+        Just (TestTargetSingleTest target) -> ("-- -p  '\\$0==\"" <> T.pack target <> "\"'", True)
+        Just (TestTargetPattern target) -> ("-- -p  '" <> T.pack target <> "'", False)
+        _otherwise -> ("", False)
+      testCommand = "cabal run escrow-test " <> suffix
+  generalExecution testCommand (awaitTestResults showErrorIfEmpty) ctx
