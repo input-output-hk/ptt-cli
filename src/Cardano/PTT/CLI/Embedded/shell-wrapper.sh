@@ -23,7 +23,7 @@ echo "Current PATH: $$PATH"
 
 # Execute cabal commands
 echo "Running cabal build..."
-cabal build escrow
+cabal build escrow-test
 
 
 echo "Running cabal test..."
