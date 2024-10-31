@@ -7,7 +7,9 @@ import Options.Applicative
 main :: IO ()
 main = do
   args <- execParser argsInfo
-  let ctx = Ctx (verbose args) (projectPath args)
-  case cmd args of
-    CmdRunTests target -> runAllTests ctx (Just target)
-    CmdListTests -> listAllTests ctx
+  let ctx = Ctx (verbose args) (projectPath args) (sourceRelativePath args)
+  let exe = case cmd args of
+        CmdRunTests target -> runAllTests (Just target)
+        CmdListTests -> listAllTests
+        CmdShowTestSuite -> showTestSuite
+  exe ctx
