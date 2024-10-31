@@ -18,16 +18,18 @@ if ! command -v cabal &> /dev/null; then
     exit 1
 fi
 
+cd $sourcePath
 # Print current PATH for debugging
 echo "Current PATH: $$PATH"
+echo "Current folder: $(pwd)"
 
 # Execute cabal commands
 echo "Running cabal build..."
-cabal build escrow-test
-
+echo "cabal build $testSuite"
+cabal build $testSuite
 
 echo "Running cabal test..."
-# cabal run escrow-test # -- -l
+echo "$testExeLine"
 echo ">>>>>START"
 $testExeLine
 echo "<<<<<<END"

@@ -8,6 +8,7 @@
 module Cardano.PTT.CLI.Process (
   listAllTests,
   runAllTests,
+  showTestSuite,
   Ctx (..),
   parseOutputLine,
   TestResult (..),
@@ -33,10 +34,13 @@ import Data.Text (Text)
 import Text.Regex.TDFA
 
 import Cardano.PTT.CLI.Arguments (TestTarget (..))
+import Data.Maybe (fromMaybe)
+import System.Exit (exitSuccess, exitWith)
+import System.FilePath ((</>))
+
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import System.Exit (exitWith)
 
 data TestElement
   = TestGroup !String ![TestElement]
@@ -78,11 +82,18 @@ instance ToJSON TestResult where
 data Ctx = Ctx
   { ctxVerbose :: !Bool
   , ctxProjectPath :: !FilePath
+  , ctxSourceRelativePath :: !(Maybe FilePath)
   }
 
-shellScript :: T.Text -> FilePath -> T.Text
-shellScript testExeLine path =
+shellScript :: T.Text -> FilePath -> T.Text -> T.Text -> T.Text
+shellScript testExeLine path sourcePath testSuite =
   [textF|src/Cardano/PTT/CLI/Embedded/shell-wrapper.sh|]
+ where
+  projectPath = T.pack path
+
+listTestsScript :: FilePath -> T.Text
+listTestsScript path =
+  [textF|src/Cardano/PTT/CLI/Embedded/list-tests.sh|]
  where
   projectPath = T.pack path
 
@@ -241,6 +252,29 @@ executeAndStream parser verbose cmd = do
   _ <- wait a1
   waitForProcess ph
 
+runShellScript :: FilePath -> IO (ExitCode, String, String)
+runShellScript scriptPath = readProcessWithExitCode "bash" [scriptPath] ""
+
+listTestSuite :: Ctx -> IO String
+listTestSuite Ctx{..} = do
+  withSystemTempFile "temp_script.sh" $ \tempPath tempHandle -> do
+    hPutStr tempHandle $ T.unpack $ listTestsScript sourcePath'
+    hFlush tempHandle
+    hClose tempHandle
+    callProcess "chmod" ["+x", tempPath]
+    (exitCode, stdout', _) <- runShellScript tempPath
+    when (exitCode /= ExitSuccess) $ do
+      TIO.putStrLn $ T.pack stdout'
+      exitWith exitCode
+    return $ removeNewlines stdout'
+ where
+  removeNewlines :: String -> String
+  removeNewlines = takeWhile (/= '\n')
+  sourcePath' :: FilePath
+  sourcePath' = case ctxSourceRelativePath of
+    Just path -> ctxProjectPath </> path
+    Nothing -> ctxProjectPath
+
 toTestElements :: [String] -> [TestElement]
 toTestElements xs = map parseElements firstGroup
  where
@@ -265,10 +299,11 @@ toTestElements xs = map parseElements firstGroup
 
 type Command = Text
 
-generalExecution :: Command -> OutputHandler a -> Ctx -> IO ()
-generalExecution testCommand outputHandler Ctx{..} = do
+generalExecution :: Command -> OutputHandler a -> T.Text -> Ctx -> IO ()
+generalExecution testCommand outputHandler testSuite Ctx{..} = do
   _exitCode <- withSystemTempFile "temp_script.sh" $ \tempPath tempHandle -> do
-    hPutStr tempHandle $ T.unpack $ shellScript testCommand ctxProjectPath
+    let sourcePath = T.pack $ fromMaybe "." ctxSourceRelativePath
+    hPutStr tempHandle $ T.unpack $ shellScript testCommand ctxProjectPath sourcePath testSuite
     hFlush tempHandle
     hClose tempHandle
     callProcess "chmod" ["+x", tempPath]
@@ -279,14 +314,21 @@ generalExecution testCommand outputHandler Ctx{..} = do
 
 listAllTests :: Ctx -> IO ()
 listAllTests ctx = do
-  let testCommand = "cabal run escrow-test -- -l"
-  generalExecution testCommand awaitTestLists ctx
+  testSuite <- T.pack <$> listTestSuite ctx
+  let testCommand = "cabal run " <> testSuite <> " -- -l"
+  generalExecution testCommand awaitTestLists testSuite ctx
 
-runAllTests :: Ctx -> Maybe TestTarget -> IO ()
-runAllTests ctx testTarget = do
+showTestSuite :: Ctx -> IO ()
+showTestSuite ctx = do
+  testSuite <- T.pack <$> listTestSuite ctx
+  printJson testSuite
+
+runAllTests :: Maybe TestTarget -> Ctx -> IO ()
+runAllTests testTarget ctx = do
+  testSuite <- T.pack <$> listTestSuite ctx
   let (suffix, showErrorIfEmpty) = case testTarget of
-        Just (TestTargetSingleTest target) -> ("-- -p  '\\$0==\"" <> T.pack target <> "\"'", True)
-        Just (TestTargetPattern target) -> ("-- -p  '" <> T.pack target <> "'", False)
+        Just (TestTargetSingleTest target) -> (" -- -p  '\\$0==\"" <> T.pack target <> "\"'", True)
+        Just (TestTargetPattern target) -> (" -- -p  '" <> T.pack target <> "'", False)
         _otherwise -> ("", False)
-      testCommand = "cabal run escrow-test " <> suffix
-  generalExecution testCommand (awaitTestResults showErrorIfEmpty) ctx
+      testCommand = "cabal run " <> testSuite <> suffix
+  generalExecution testCommand (awaitTestResults showErrorIfEmpty) testSuite ctx

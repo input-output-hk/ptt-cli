@@ -6,6 +6,7 @@ data Args = Args
   { projectPath :: !FilePath
   , verbose :: !Bool
   , cmd :: !Command
+  , sourceRelativePath :: !(Maybe FilePath)
   }
 
 argsParser :: Parser Args
@@ -27,6 +28,15 @@ argsParser =
           <> showDefault
       )
     <*> commandParser
+    <*> optional
+      ( option
+          str
+          ( long "source-relative-path"
+              <> metavar "SOURCE_RELATIVE_PATH"
+              <> short 's'
+              <> help "Source relative path"
+          )
+      )
 
 argsInfo :: ParserInfo Args
 argsInfo =
@@ -37,13 +47,14 @@ argsInfo =
     )
 data TestTarget = TestTargetSingleTest String | TestTargetPattern String | TestTargetAllTests
 
-data Command = CmdListTests | CmdRunTests TestTarget
+data Command = CmdListTests | CmdRunTests TestTarget | CmdShowTestSuite
 
 commandParser :: Parser Command
 commandParser =
   hsubparser
     ( command "run-tests" (CmdRunTests <$> runTestsCommandInfo)
         <> command "list-tests" (CmdListTests <$ listTestsCommandInfo)
+        <> command "show-test-suite" (CmdShowTestSuite <$ listTestsCommandInfo)
     )
 
 listTestsCommandInfo :: ParserInfo ()
@@ -52,6 +63,14 @@ listTestsCommandInfo =
     (pure ())
     ( fullDesc
         <> header "ptt-cli list-tests — List all tests"
+    )
+
+showTestSuiteCommandInfo :: ParserInfo ()
+showTestSuiteCommandInfo =
+  info
+    (pure ())
+    ( fullDesc
+        <> header "ptt-cli show-test-suite — Show test suite name"
     )
 runTestsParser :: Parser TestTarget
 runTestsParser =
