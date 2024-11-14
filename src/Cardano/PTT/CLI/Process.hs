@@ -35,7 +35,7 @@ import Text.Regex.TDFA
 
 import Cardano.PTT.CLI.Arguments (TestTarget (..))
 import Data.Maybe (fromMaybe)
-import System.Exit (exitSuccess, exitWith)
+import System.Exit (exitWith)
 import System.FilePath ((</>))
 
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -105,7 +105,7 @@ awaitStartLine verbose h = liftIO $ do
     else do
       line <- hGetLine h
       when verbose $ TIO.putStrLn $ T.pack line
-      if line == ">>>>>START"
+      if line == startLine
         then return ()
         else awaitStartLine verbose h
 
@@ -117,14 +117,16 @@ readTestLists verbose h acc = liftIO $ do
     else do
       line <- hGetLine h
       when verbose $ TIO.putStrLn $ T.pack line
-      if line == "<<<<<<END"
+      if line == endLine
         then return acc
         else do
           readTestLists verbose h (line : acc)
 awaitTestLists :: (MonadIO m) => Bool -> Handle -> m [TestElement]
 awaitTestLists verbose h = do
   awaitStartLine verbose h
-  tests' <- reverse <$> readTestLists verbose h []
+  allLines <- reverse <$> readTestLists verbose h []
+  -- take until not "=========[COVERED]=========="
+  let tests' = takeWhile (/= coveredLine) allLines
   let testElements = toTestElements tests'
   printJson testElements
   return testElements
@@ -138,10 +140,105 @@ readTestResults verbose h acc = liftIO $ do
     else do
       line <- hGetLine h
       when verbose $ TIO.putStrLn $ T.pack line
-      if line == "<<<<<<END"
-        then return acc
-        else do
-          readTestResults verbose h (line : acc)
+      case line of
+        x | x == endLine -> return acc -- ">>>>>END"
+        -- ignore the testSummaryLine
+        x | isTestSummaryLine x -> readTestResults verbose h acc
+        _otherwise -> readTestResults verbose h (line : acc)
+
+data CoverageEntry = CoverageEntry
+  { coveStartLineNo :: !Int
+  , coveEndLineNo :: !Int
+  , coveStartColumn :: !Int
+  , coveEndColumn :: !Int
+  , coveStatus :: !(Maybe Bool)
+  , coveFile :: !String
+  }
+  deriving (Show)
+
+instance ToJSON CoverageEntry where
+  toJSON CoverageEntry{..} =
+    object
+      [ "startLine" .= coveStartLineNo
+      , "endLine" .= coveEndLineNo
+      , "startColumn" .= coveStartColumn
+      , "endColumn" .= coveEndColumn
+      , "status" .= coveStatus
+      , "file" .= coveFile
+      ]
+
+data CoverageGroup = CoverageGroup
+  { covered :: ![CoverageEntry]
+  , uncovered :: ![CoverageEntry]
+  , ignored :: ![CoverageEntry]
+  }
+  deriving (Show)
+
+instance ToJSON CoverageGroup where
+  toJSON CoverageGroup{..} =
+    object
+      [ "covered" .= covered
+      , "uncovered" .= uncovered
+      , "ignored" .= ignored
+      ]
+
+parseCoverageEntry :: String -> Maybe CoverageEntry
+parseCoverageEntry str =
+  -- without status: src/Contract/Escrow.hs:490,22-490,55
+  -- with status: src/Contract/Escrow.hs:490,22-490,55 = False
+  -- let's parse with regex
+  let
+    patternWithoutStatus = "^(.*):([0-9]+),([0-9]+)-([0-9]+),([0-9]+)$" :: String
+    patternWithStatus = "^(.*):([0-9]+),([0-9]+)-([0-9]+),([0-9]+) = (True|False)$" :: String
+    matchWithStatus = str =~ patternWithStatus :: (String, String, String, [String])
+    matchWithoutStatus = str =~ patternWithoutStatus :: (String, String, String, [String])
+   in
+    case (matchWithoutStatus, matchWithStatus) of
+      (_, (_, _, _, [file, startLine', startCol, endLine', endCol, status])) ->
+        covEntry startLine' endLine' startCol endCol (Just status) file
+      ((_, _, _, [file, startLine', startCol, endLine', endCol]), _) ->
+        covEntry startLine' endLine' startCol endCol Nothing file
+      _otherwise -> Nothing
+ where
+  covEntry startLine' endLine' startCol endCol status file =
+    Just $
+      CoverageEntry
+        { coveStartLineNo = read startLine'
+        , coveEndLineNo = read endLine'
+        , coveStartColumn = read startCol
+        , coveEndColumn = read endCol
+        , coveStatus = (Just . read) =<< status
+        , coveFile = file
+        }
+
+-- >>> parseCoverageEntry "src/Contract/Escrow.hs:489,22-490,55 = False"
+-- Just (CoverageEntry {cvgentryStartLineNo = 489, cvgentryEndLineNo = 490, cvgentryStartColumn = 22, cvgentryEndColumn = 55, cvgentryStatus = Just False, cvgentryFile = "src/Contract/Escrow.hs"})
+-- >>> parseCoverageEntry "src/Contract/Escrow.hs:489,22-490,55"
+-- Just (CoverageEntry {cvgentryStartLineNo = 489, cvgentryEndLineNo = 490, cvgentryStartColumn = 22, cvgentryEndColumn = 55, cvgentryStatus = Nothing, cvgentryFile = "src/Contract/Escrow.hs"})
+
+endLine, startLine, coveredLine, uncoveredLine, ignoredLine :: String
+endLine = "<<<<<<END"
+startLine = ">>>>>START"
+coveredLine = "=========[COVERED]=========="
+uncoveredLine = "========[UNCOVERED]========="
+ignoredLine = "=========[IGNORED]=========="
+
+isTestSummaryLine :: String -> Bool
+isTestSummaryLine line =
+  let
+    -- eg1: 1 out of 5 tests failed (12.40s)
+    failedTests = "^[[:space:]]*([0-9]+) out of ([0-9]+) tests failed \\(([0-9]+\\.[0-9]+)s\\)$" :: String
+    -- eg2: All 5 tests passed (12.28s)
+    passedTests = "^[[:space:]]*All ([0-9]+) tests passed \\(([0-9]+\\.[0-9]+)s\\)$" :: String
+   in
+    line =~ failedTests || line =~ passedTests
+
+-- >>> isTestSummaryLine "1 out of 5 tests failed (12.40s)"
+-- True
+-- >>> isTestSummaryLine "All 5 tests passed (12.28s)"
+-- True
+-- >>> isTestSummaryLine coveredLine
+-- False
 
 parseOutputLine :: Maybe TestResult -> String -> (Maybe TestResult, Maybe TestResult)
 parseOutputLine prevElement line =
@@ -176,16 +273,63 @@ parseOutputLine prevElement line =
 -- >>> parseOutputLine  Nothing "test1: OK (0.1s)"
 -- (Nothing,Just (TestResult {testName = "test1", testStatus = TestOK, testDuration = 0.1}))
 
+-- >>> succ Ignored
+
 newtype ErrorMsg = ErrorMsg Text
   deriving (Show)
 
 instance ToJSON ErrorMsg where
   toJSON (ErrorMsg msg) = object ["error" .= msg]
 
-awaitTestResults :: (MonadIO m) => Bool -> Bool -> Handle -> m [TestResult]
+data CoverageType = Ignored | Uncovered | Covered
+  deriving (Show, Eq, Enum)
+
+parseCoverageType :: String -> Maybe CoverageType
+parseCoverageType line
+  | line == coveredLine = Just Covered
+  | line == uncoveredLine = Just Uncovered
+  | line == ignoredLine = Just Ignored
+  | otherwise = Nothing
+
+extractCoverageEntries :: [String] -> (CoverageGroup, [String])
+extractCoverageEntries xs = (covGroup, tests)
+ where
+  (covGroup, tests, _) = foldl' extract' (CoverageGroup [] [] [], [], Ignored) xs
+  extract' (acc, rest, lastCoverageType) line =
+    case (parseCoverageEntry line, parseCoverageType line) of
+      (Just entry, _) -> (addLineToCoverageGroup acc lastCoverageType entry, rest, lastCoverageType)
+      -- we have the coverage type that just ended
+      -- so we need to switch to the next one
+      (_, Just coverageType) ->
+        let nextCoverageType =
+              if Covered == coverageType
+                then coverageType
+                else succ coverageType
+         in (acc, rest, nextCoverageType)
+      (Nothing, Nothing) -> (acc, line : rest, lastCoverageType)
+  addLineToCoverageGroup :: CoverageGroup -> CoverageType -> CoverageEntry -> CoverageGroup
+  addLineToCoverageGroup (CoverageGroup covered uncovered ignored) Covered entry =
+    CoverageGroup (entry : covered) uncovered ignored
+  addLineToCoverageGroup (CoverageGroup covered uncovered ignored) Uncovered entry =
+    CoverageGroup covered (entry : uncovered) ignored
+  addLineToCoverageGroup (CoverageGroup covered uncovered ignored) Ignored entry =
+    CoverageGroup covered uncovered (entry : ignored)
+
+data ResultsWithCoverage = ResultsWithCoverage ![TestResult] !CoverageGroup
+  deriving (Show)
+
+instance ToJSON ResultsWithCoverage where
+  toJSON (ResultsWithCoverage results coverage) =
+    object
+      [ "results" .= results
+      , "coverage" .= coverage
+      ]
+
+awaitTestResults :: (MonadIO m) => Bool -> Bool -> Handle -> m ResultsWithCoverage
 awaitTestResults showErrorIfEmpty verbose h = do
   awaitStartLine verbose h
-  tests' <- reverse <$> readTestResults verbose h []
+  ret <- readTestResults verbose h []
+  let (coverageGroup, tests') = extractCoverageEntries ret
   let
     -- parse and accumulate test results
     (xs, last') = foldl' accumulate ([], Nothing) tests'
@@ -198,10 +342,12 @@ awaitTestResults showErrorIfEmpty verbose h = do
   when (showErrorIfEmpty && null testResults) $ do
     printJson $ ErrorMsg "No test results found"
     liftIO $ exitWith $ ExitFailure 1
+
+  let fullResult = ResultsWithCoverage testResults coverageGroup
   -- print test results
-  printJson testResults
+  printJson fullResult
   -- and return them
-  return testResults
+  return fullResult
  where
   accumulate ::
     ([TestResult], Maybe TestResult) ->
@@ -240,7 +386,7 @@ streamOutput verbose h = do
       when verbose $ TIO.putStrLn $ T.pack line
       streamOutput verbose h
 
-type OutputHandler a = forall m. (MonadIO m) => Bool -> Handle -> m [a]
+type OutputHandler a = forall m. (MonadIO m) => Bool -> Handle -> m a
 
 -- Function to execute a command in a shell and stream its output
 executeAndStream :: OutputHandler a -> Bool -> String -> IO ExitCode
