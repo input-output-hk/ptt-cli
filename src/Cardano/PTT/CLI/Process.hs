@@ -17,7 +17,7 @@ module Cardano.PTT.CLI.Process (
 
 import Control.Monad (when)
 import Data.Aeson
-import qualified Data.Text.IO as TIO
+import Data.Text.IO qualified as TIO
 import GHC.IO.Exception
 import System.IO
 import System.IO.Temp
@@ -38,9 +38,10 @@ import Data.Maybe (fromMaybe)
 import System.Exit (exitWith)
 import System.FilePath ((</>))
 
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import Cardano.PTT.CLI.Coverage
+import Data.ByteString.Lazy.Char8 qualified as BSL
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 
 data TestElement
   = TestGroup !String ![TestElement]
@@ -145,42 +146,6 @@ readTestResults verbose h acc = liftIO $ do
         -- ignore the testSummaryLine
         x | isTestSummaryLine x -> readTestResults verbose h acc
         _otherwise -> readTestResults verbose h (line : acc)
-
-data CoverageEntry = CoverageEntry
-  { coveStartLineNo :: !Int
-  , coveEndLineNo :: !Int
-  , coveStartColumn :: !Int
-  , coveEndColumn :: !Int
-  , coveStatus :: !(Maybe Bool)
-  , coveFile :: !String
-  }
-  deriving (Show)
-
-instance ToJSON CoverageEntry where
-  toJSON CoverageEntry{..} =
-    object
-      [ "startLine" .= coveStartLineNo
-      , "endLine" .= coveEndLineNo
-      , "startColumn" .= coveStartColumn
-      , "endColumn" .= coveEndColumn
-      , "status" .= coveStatus
-      , "file" .= coveFile
-      ]
-
-data CoverageGroup = CoverageGroup
-  { covered :: ![CoverageEntry]
-  , uncovered :: ![CoverageEntry]
-  , ignored :: ![CoverageEntry]
-  }
-  deriving (Show)
-
-instance ToJSON CoverageGroup where
-  toJSON CoverageGroup{..} =
-    object
-      [ "covered" .= covered
-      , "uncovered" .= uncovered
-      , "ignored" .= ignored
-      ]
 
 parseCoverageEntry :: String -> Maybe CoverageEntry
 parseCoverageEntry str =
@@ -322,7 +287,7 @@ instance ToJSON ResultsWithCoverage where
   toJSON (ResultsWithCoverage results coverage) =
     object
       [ "results" .= results
-      , "coverage" .= coverage
+      , "coverage" .= flattenCoverage coverage
       ]
 
 awaitTestResults :: (MonadIO m) => Bool -> Bool -> Handle -> m ResultsWithCoverage

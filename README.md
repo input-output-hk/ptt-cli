@@ -18,6 +18,8 @@
 
    3.2 `cabal run ptt-cli -- --project-path=<MINIMAL_EXAMPLES_PATH>  list-tests`
 
+NOTE: now the repo supports nix develop env as well, so you can `nix develop .`
+
 Running the tests:
 
 all tests
@@ -31,3 +33,8 @@ eg: `cabal run ptt-cli -- --project-path=/Users/.../iog/minimal-ptt-examples-new
 multiple tests based on a pattern
 
 eg: `cabal run ptt-cli -- --project-path=/Users/.../iog/minimal-ptt-examples-new  run-tests --pattern "can redeem"`
+
+4. JSON tips
+
+   4.1 `CoverageStatus` possible values: "NotCovered", "HasBeenHere", "HasBeenFalse", "HasBeenTrue", "HasBeenBoth"
+   4.2 `IgnoreStatus` possible values: "NotIgnored", "IgnoredIfFalse", "IgnoredIfTrue", "AlwaysIgnored"
