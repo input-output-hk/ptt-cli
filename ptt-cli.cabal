@@ -19,16 +19,39 @@ extra-doc-files:    CHANGELOG.md
 extra-source-files: src/Cardano/PTT/CLI/Embedded/*
 default-extensions:   OverloadedRecordDot
 
+common lang
+  default-language:   Haskell2010
+  default-extensions:
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveLift
+    DeriveTraversable
+    ExplicitForAll
+    FlexibleContexts
+    GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    LambdaCase
+    NamedFieldPuns
+    ScopedTypeVariables
+    StandaloneDeriving
 
-common warnings
-    ghc-options: -Wall
+  -- See Plutus Tx readme for why we need the following flags:
+  -- -fobject-code -fno-ignore-interface-pragmas and -fno-omit-interface-pragmas
+  ghc-options:
+    -Wall -Widentities -Wincomplete-record-updates -Wunused-packages
+    -Wincomplete-uni-patterns -Wnoncanonical-monad-instances
+    -Wredundant-constraints -fobject-code
+    -fno-ignore-interface-pragmas -fno-omit-interface-pragmas
+    -fplugin-opt PlutusTx.Plugin:target-version=1.0.0
 
 library
-    import:           warnings
+    import:           lang
     exposed-modules:   Cardano.PTT.CLI.Process
                      , Cardano.PTT.CLI.Arguments
 
-    other-modules:   Cardano.PTT.CLI.Internal
+    other-modules:     Cardano.PTT.CLI.Internal
+                     , Cardano.PTT.CLI.Coverage
     build-depends:     base ^>=4.18.1.0
                      , process
                      , text
@@ -42,12 +65,14 @@ library
                      , bytestring
                      , regex-tdfa
                      , filepath
+                     , plutus-tx
+                     , containers
 
     hs-source-dirs:   src
     default-language: Haskell2010
 
 executable ptt-cli
-    import:           warnings
+    import:           lang
 
     main-is:          Main.hs
 
@@ -60,7 +85,7 @@ executable ptt-cli
     default-language: Haskell2010
 
 test-suite ptt-cli-test
-    import:           warnings
+    import:           lang
 
     default-language: Haskell2010
     type:             exitcode-stdio-1.0
