@@ -49,9 +49,9 @@ library
     import:           lang
     exposed-modules:   Cardano.PTT.CLI.Process
                      , Cardano.PTT.CLI.Arguments
+                     , Cardano.PTT.CLI.Coverage
 
     other-modules:     Cardano.PTT.CLI.Internal
-                     , Cardano.PTT.CLI.Coverage
     build-depends:     base ^>=4.18.1.0
                      , process
                      , text
@@ -91,8 +91,10 @@ test-suite ptt-cli-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
+    other-modules:    Coverage.Spec
     build-depends:
           base ^>=4.18.1.0
         , ptt-cli
         , tasty
         , tasty-hunit
+        , containers
