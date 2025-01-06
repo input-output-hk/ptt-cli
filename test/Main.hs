@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Cardano.PTT.CLI.Process
+import Coverage.Spec (coverageTests)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -69,4 +70,5 @@ parseOutputLineTests =
           expected = (Nothing, Just $ fail'{testStatus = TestFail "first line\nsecond line"})
          in
           actual @?= expected
+    , coverageTests
     ]

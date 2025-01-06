@@ -8,6 +8,11 @@ module Cardano.PTT.CLI.Coverage (
   covEntryToCovLoc,
   covEntryToAnnotation,
   FlattenCoverage (..),
+  CovLoc (..),
+  CoverageAnnotation (CoverBool, CoverLocation),
+  Status (..),
+  CoverStatus (..),
+  IgnoreStatus (..),
 )
 where
 
@@ -131,6 +136,7 @@ instance Monoid Status where
 newtype FlattenCoverage = FlattenCoverage
   { unFlattenCoverage :: Map CovLoc Status
   }
+  deriving (Show, Eq)
 
 newtype InternalCovLoc = InternalCovLoc CovLoc
 
