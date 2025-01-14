@@ -68,7 +68,7 @@ instance ToJSON CoverageEntry where
 -- NOTE: Statuses and their class instances are copied from the cardano-node-emulator
 -- since the project doesn't expose them.
 data CoverStatus = NotCovered | HasBeenHere | HasBeenFalse | HasBeenTrue | HasBeenBoth
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Show)
 
 instance ToJSON CoverStatus where
   toJSON NotCovered = "NotCovered"
@@ -78,7 +78,7 @@ instance ToJSON CoverStatus where
   toJSON HasBeenBoth = "HasBeenBoth"
 
 data IgnoreStatus = NotIgnored | IgnoredIfFalse | IgnoredIfTrue | AlwaysIgnored
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Show)
 
 instance ToJSON IgnoreStatus where
   toJSON NotIgnored = "NotIgnored"
@@ -87,7 +87,7 @@ instance ToJSON IgnoreStatus where
   toJSON AlwaysIgnored = "AlwaysIgnored"
 
 data Status = OnChain !CoverStatus !IgnoreStatus
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Show)
 
 instance Semigroup CoverStatus where
   HasBeenBoth <> _ = HasBeenBoth
@@ -216,12 +216,10 @@ listToMap = foldl' g Map.empty
         h (Just xs) = Just (a : xs)
      in Map.alter h k d
 
--- TODO: TEST ME
 covEntryToCovLoc :: CoverageEntry -> CovLoc
 covEntryToCovLoc CoverageEntry{..} =
   CovLoc coveFile coveStartLineNo coveEndLineNo coveStartColumn coveEndColumn
 
--- TODO: TEST ME
 covEntryToAnnotation :: CoverageEntry -> CoverageAnnotation
 covEntryToAnnotation entry@CoverageEntry{..} =
   let covLoc = covEntryToCovLoc entry
