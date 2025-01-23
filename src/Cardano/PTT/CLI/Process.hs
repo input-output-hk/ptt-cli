@@ -33,7 +33,11 @@ import Data.Text (Text)
 
 import Text.Regex.TDFA
 
-import Cardano.PTT.CLI.Arguments (TestTarget (..))
+import Cardano.PTT.CLI.Arguments (
+  RunTestsArguments (..),
+  TestTarget (..),
+  extractTestArgumentsForTestRun,
+ )
 import Data.Maybe (fromMaybe)
 import System.Exit (exitWith)
 import System.FilePath ((</>))
@@ -434,12 +438,17 @@ showTestSuite ctx = do
   testSuite <- T.pack <$> listTestSuite ctx
   printJson testSuite
 
-runAllTests :: Maybe TestTarget -> Ctx -> IO ()
-runAllTests testTarget ctx = do
+runAllTests :: RunTestsArguments -> Ctx -> IO ()
+runAllTests args ctx = do
   testSuite <- T.pack <$> listTestSuite ctx
-  let (suffix, showErrorIfEmpty) = case testTarget of
-        Just (TestTargetSingleTest target) -> (" -- -p  '\\$0==\"" <> T.pack target <> "\"'", True)
-        Just (TestTargetPattern target) -> (" -- -p  '" <> T.pack target <> "'", False)
-        _otherwise -> ("", False)
-      testCommand = "cabal run " <> testSuite <> suffix
+  let argumentsList = extractTestArgumentsForTestRun args
+  let suffix = T.intercalate " " $ map T.pack argumentsList
+  let showErrorIfEmpty = case testTarget args of
+        TestTargetSingleTest _ -> True
+        TestTargetPattern _ -> False
+        TestTargetAllTests -> False
+      testCommand =
+        "cabal run "
+          <> testSuite
+          <> (if T.empty == suffix then "" else " -- " <> suffix)
   generalExecution testCommand (awaitTestResults showErrorIfEmpty) testSuite ctx
