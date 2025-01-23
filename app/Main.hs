@@ -9,7 +9,7 @@ main = do
   args <- execParser argsInfo
   let ctx = Ctx (verbose args) (projectPath args) (sourceRelativePath args)
   let exe = case cmd args of
-        CmdRunTests target -> runAllTests (Just target)
+        CmdRunTests runTestArgs -> runAllTests runTestArgs
         CmdListTests -> listAllTests
         CmdShowTestSuite -> showTestSuite
   exe ctx
